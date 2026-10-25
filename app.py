@@ -1,5 +1,6 @@
 import hashlib
 import json
+import logging
 import os
 import sqlite3
 import threading
@@ -194,7 +195,10 @@ async def send_message(request: Request, authorization: str|None=Header(default=
                 # Durable IDs are content-derived; batch packages with identical semantics remain distinct through package id.
                 prop["actionId"]=hashlib.sha256((owner+batch["batchId"]+p["packageId"]+canonical(p)+prop["action"]).encode()).hexdigest()[:32]
                 proposals.append(prop)
-        except Exception:
+        except Exception as exc:
+            response = getattr(exc, "response", None)
+            provider_status = getattr(response, "status_code", None)
+            logging.exception("Invoice decision failed (type=%s, provider_status=%s)", type(exc).__name__, provider_status)
             return err(503,"DECISION_UNAVAILABLE")
         if len({x["packageId"] for x in proposals})!=len(proposals) or len({x["actionId"] for x in proposals})!=len(proposals): return err(400,"INVALID_BATCH")
         tid=str(uuid.uuid4()); cid=str(uuid.uuid4())
@@ -282,6 +286,8 @@ def cancel_task(task_id: str, authorization: str|None=Header(default=None), a2a_
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("app:app", host="0.0.0.0", port=int(os.getenv("PORT", "8080")))
+
+
 
 
 
